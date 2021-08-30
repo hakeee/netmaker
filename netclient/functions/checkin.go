@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"strings"
 	"os"
+	"strings"
 
 	nodepb "github.com/gravitl/netmaker/grpc"
 	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/netclient/auth"
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/local"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"github.com/gravitl/netmaker/netclient/wireguard"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"google.golang.org/grpc"
@@ -30,7 +31,7 @@ func checkIP(node *models.Node, servercfg config.ServerConfig, cliconf config.Cl
 	var err error
 	if node.Roaming == "yes" && node.IsStatic != "yes" {
 		if node.IsLocal == "no" {
-			extIP, err := getPublicIP()
+			extIP, err := netclientutils.GetPublicIP()
 			if err != nil {
 				log.Println("error encountered checking ip addresses:", err)
 			}
@@ -53,7 +54,7 @@ func checkIP(node *models.Node, servercfg config.ServerConfig, cliconf config.Cl
 				ipchange = true
 			}
 		} else {
-			localIP, err := getLocalIP(node.LocalRange)
+			localIP, err := netclientutils.GetLocalIP(node.LocalRange)
 			if err != nil {
 				log.Println("error encountered checking ip addresses:", err)
 			}

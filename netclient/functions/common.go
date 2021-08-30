@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"os/exec"
 	"strings"
 
@@ -43,122 +42,6 @@ func ListPorts() error {
 		fmt.Println(i.ListenPort)
 	}
 	return err
-}
-
-func GetFreePort(rangestart int32) (int32, error) {
-	wgclient, err := wgctrl.New()
-	if err != nil {
-		return 0, err
-	}
-	devices, err := wgclient.Devices()
-	if err != nil {
-		return 0, err
-	}
-	var portno int32
-	portno = 0
-	for x := rangestart; x <= 60000; x++ {
-		conflict := false
-		for _, i := range devices {
-			if int32(i.ListenPort) == x {
-				conflict = true
-				break
-			}
-		}
-		if conflict {
-			continue
-		}
-		portno = x
-		break
-	}
-	return portno, err
-}
-
-func getLocalIP(localrange string) (string, error) {
-	_, localRange, err := net.ParseCIDR(localrange)
-	if err != nil {
-		return "", err
-	}
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return "", err
-	}
-	var local string
-	found := false
-	for _, i := range ifaces {
-		if i.Flags&net.FlagUp == 0 {
-			continue // interface down
-		}
-		if i.Flags&net.FlagLoopback != 0 {
-			continue // loopback interface
-		}
-		addrs, err := i.Addrs()
-		if err != nil {
-			return "", err
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				if !found {
-					ip = v.IP
-					local = ip.String()
-					found = localRange.Contains(ip)
-				}
-			case *net.IPAddr:
-				if !found {
-					ip = v.IP
-					local = ip.String()
-					found = localRange.Contains(ip)
-				}
-			}
-		}
-	}
-	if !found || local == "" {
-		return "", errors.New("Failed to find local IP in range " + localrange)
-	}
-	return local, nil
-}
-
-func getPublicIP() (string, error) {
-
-	iplist := []string{"http://ip.client.gravitl.com", "https://ifconfig.me", "http://api.ipify.org", "http://ipinfo.io/ip"}
-	endpoint := ""
-	var err error
-	for _, ipserver := range iplist {
-		resp, err := http.Get(ipserver)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			bodyBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				continue
-			}
-			endpoint = string(bodyBytes)
-			break
-		}
-
-	}
-	if err == nil && endpoint == "" {
-		err = errors.New("Public Address Not Found.")
-	}
-	return endpoint, err
-}
-
-func getMacAddr() ([]string, error) {
-	ifas, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	var as []string
-	for _, ifa := range ifas {
-		a := ifa.HardwareAddr.String()
-		if a != "" {
-			as = append(as, a)
-		}
-	}
-	return as, nil
 }
 
 func getPrivateAddr() (string, error) {

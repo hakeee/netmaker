@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/gravitl/netmaker/models"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -41,13 +42,13 @@ func Write(config *ClientConfig, network string) error {
 		err := errors.New("No network provided. Exiting.")
 		return err
 	}
-	_, err := os.Stat("/etc/netclient")
+	_, err := os.Stat(netclientutils.GetNetclientPath())
 	if os.IsNotExist(err) {
-		os.Mkdir("/etc/netclient", 744)
+		os.Mkdir(netclientutils.GetNetclientPath(), 744)
 	} else if err != nil {
 		return err
 	}
-	home := "/etc/netclient"
+	home := netclientutils.GetNetclientPath()
 
 	file := fmt.Sprintf(home + "/netconfig-" + network)
 	f, err := os.OpenFile(file, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
@@ -67,14 +68,14 @@ func WriteServer(server string, accesskey string, network string) error {
 	}
 	nofile := false
 	//home, err := homedir.Dir()
-	_, err := os.Stat("/etc/netclient")
+	_, err := os.Stat(netclientutils.GetNetclientPath())
 	if os.IsNotExist(err) {
-		os.Mkdir("/etc/netclient", 744)
+		os.Mkdir(netclientutils.GetNetclientPath(), 744)
 	} else if err != nil {
 		fmt.Println("couldnt find or create /etc/netclient")
 		return err
 	}
-	home := "/etc/netclient"
+	home := netclientutils.GetNetclientPath()
 
 	file := fmt.Sprintf(home + "/netconfig-" + network)
 	//f, err := os.Open(file)
@@ -147,7 +148,7 @@ func (config *ClientConfig) ReadConfig() {
 
 	nofile := false
 	//home, err := homedir.Dir()
-	home := "/etc/netclient"
+	home := netclientutils.GetNetclientPath()
 	file := fmt.Sprintf(home + "/netconfig-" + config.Network)
 	//f, err := os.Open(file)
 	f, err := os.OpenFile(file, os.O_RDONLY, 0666)
@@ -296,11 +297,11 @@ func GetCLIConfig(c *cli.Context) (ClientConfig, string, error) {
 
 func ReadConfig(network string) (*ClientConfig, error) {
 	if network == "" {
-		err := errors.New("No network provided. Exiting.")
+		err := errors.New("no network provided - exiting")
 		return nil, err
 	}
 	nofile := false
-	home := "/etc/netclient"
+	home := netclientutils.GetNetclientPath()
 	file := fmt.Sprintf(home + "/netconfig-" + network)
 	f, err := os.Open(file)
 
