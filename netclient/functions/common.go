@@ -17,6 +17,7 @@ import (
 	"github.com/gravitl/netmaker/netclient/auth"
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/local"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -189,7 +190,11 @@ func RemoveLocalInstance(cfg *config.ClientConfig, networkName string) error {
 		log.Println("Removed " + networkName + " network locally")
 	}
 	if cfg.Daemon != "off" {
-		err = local.RemoveSystemDServices(networkName)
+		if netclientutils.IsWindows() {
+			// TODO: Remove job?
+		} else {
+			err = local.RemoveSystemDServices(networkName)
+		}
 	}
 	return err
 }
@@ -240,7 +245,7 @@ func List() error {
 
 func GetNetworks() ([]string, error) {
 	var networks []string
-	files, err := ioutil.ReadDir("/etc/netclient")
+	files, err := ioutil.ReadDir(netclientutils.GetNetclientPath())
 	if err != nil {
 		return networks, err
 	}

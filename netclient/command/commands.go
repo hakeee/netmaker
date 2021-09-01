@@ -9,6 +9,8 @@ import (
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/functions"
 	"github.com/gravitl/netmaker/netclient/local"
+	"github.com/gravitl/netmaker/netclient/ncwindows"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
@@ -22,7 +24,13 @@ var (
 
 func Join(cfg config.ClientConfig, privateKey string) error {
 
-	err := functions.JoinNetwork(cfg, privateKey)
+	var err error
+	if netclientutils.IsWindows() {
+		err = ncwindows.WindowsJoin(cfg, privateKey)
+	} else {
+		err = functions.JoinNetwork(cfg, privateKey)
+	}
+
 	if err != nil {
 		if !strings.Contains(err.Error(), "ALREADY_INSTALLED") {
 			log.Println("Error installing: ", err)

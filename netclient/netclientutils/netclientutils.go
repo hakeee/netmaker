@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ const NO_DB_RECORD = "no result found"
 const NO_DB_RECORDS = "could not find any records"
 const WINDOWS_APP_DATA_PATH = "\\AppData\\Local\\Netclient"
 const LINUX_APP_DATA_PATH = "/etc/netclient"
+const WINDOWS_SVC_NAME = "Netclient"
+const DEFAULT_MTU = 1200
 
 func IsWindows() bool {
 	return runtime.GOOS == "windows"
@@ -161,10 +164,82 @@ func GetFreePort(rangestart int32) (int32, error) {
 	return portno, err
 }
 
+// == OS PATH FUNCTIONS ==
+
+func GetHomeDirWindows() string {
+	if IsWindows() {
+		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+		if home == "" {
+			home = os.Getenv("USERPROFILE")
+		}
+		return home
+	}
+	return os.Getenv("HOME")
+}
+
 func GetNetclientPath() string {
 	if IsWindows() {
-		return WINDOWS_APP_DATA_PATH
+		return GetHomeDirWindows() + WINDOWS_APP_DATA_PATH
 	} else {
 		return LINUX_APP_DATA_PATH
 	}
 }
+
+func GetNetclientPathSpecific() string {
+	if IsWindows() {
+		return GetHomeDirWindows() + WINDOWS_APP_DATA_PATH + "\\"
+	} else {
+		return LINUX_APP_DATA_PATH + "/"
+	}
+}
+
+// Implement later..
+// func CreateWindowsService() (*mgr.Service, error) {
+// 	m, err := mgr.Connect()
+// 	if err != nil {
+// 		return nil, errors.New("Netclient could not connect to Windows service manager")
+// 	}
+
+// 	windowsService, err := m.OpenService(WINDOWS_SVC_NAME)
+// 	if err == nil {
+// 		windowsService.Close()
+// 		return nil, errors.New("service " + WINDOWS_SVC_NAME + " is already installed")
+// 	}
+
+// 	windowsExecutable, err := os.Executable()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	c := mgr.Config{
+// 		ServiceType:  windows.SERVICE_WIN32_OWN_PROCESS,
+// 		StartType:    mgr.StartAutomatic,
+// 		ErrorControl: mgr.ErrorNormal,
+// 		DisplayName:  WINDOWS_SVC_NAME,
+// 		Description:  "Meshes Windows machine with Netmaker networks.",
+// 	}
+
+// 	windowsService, err = m.CreateService(WINDOWS_SVC_NAME, windowsExecutable, c)
+// 	if err != nil {
+// 		return nil, errors.New("failed to create Windows service " + WINDOWS_SVC_NAME)
+// 	}
+// 	defer windowsService.Close()
+
+// 	recoveryActions := []mgr.RecoveryAction{
+// 		{mgr.ServiceRestart, 1 * time.Second},
+// 		{mgr.ServiceRestart, 8 * time.Second},
+// 		{mgr.ServiceRestart, 16 * time.Second},
+// 		{mgr.ServiceRestart, 24 * time.Second},
+// 		{mgr.ServiceRestart, 32 * time.Second},
+// 		{mgr.ServiceRestart, 40 * time.Second},
+// 		{mgr.ServiceRestart, 48 * time.Second},
+// 		{mgr.ServiceRestart, 56 * time.Second},
+// 		{mgr.ServiceRestart, 64 * time.Second},
+// 	}
+// 	const resetPeriodSecs = 60
+// 	err = windowsService.SetRecoveryActions(recoveryActions, resetPeriodSecs)
+// 	if err != nil {
+// 		return nil, errors.New("could not set recovery actions")
+// 	}
+// 	return windowsService, nil
+// }

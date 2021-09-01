@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gravitl/netmaker/netclient/config"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 )
 
 func SetIPForwarding() error {
@@ -85,6 +86,9 @@ func ConfigureSystemD(network string) error {
 		}
 	*/
 	//binarypath := path  + "/netclient"
+	if netclientutils.IsWindows() {
+		return nil
+	}
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
 		return err
@@ -210,52 +214,54 @@ func isOnlyService(network string) (bool, error) {
 
 func RemoveSystemDServices(network string) error {
 	//sysExec, err := exec.LookPath("systemctl")
-
-	fullremove, err := isOnlyService(network)
-	if err != nil {
-		log.Println(err)
-	}
-
-	if fullremove {
-		_, err = RunCmd("systemctl disable netclient@.service")
+	if !netclientutils.IsWindows() {
+		fullremove, err := isOnlyService(network)
 		if err != nil {
-			log.Println("Error disabling netclient@.service. Please investigate.")
 			log.Println(err)
 		}
-	}
-	_, err = RunCmd("systemctl daemon-reload")
-	if err != nil {
-		log.Println("Error stopping netclient-" + network + ".timer. Please investigate.")
-		log.Println(err)
-	}
-	_, err = RunCmd("systemctl disable netclient-" + network + ".timer")
-	if err != nil {
-		log.Println("Error disabling netclient-" + network + ".timer. Please investigate.")
-		log.Println(err)
-	}
-	if fullremove {
-		if FileExists("/etc/systemd/system/netclient@.service") {
-			err = os.Remove("/etc/systemd/system/netclient@.service")
+
+		if fullremove {
+			_, err = RunCmd("systemctl disable netclient@.service")
+			if err != nil {
+				log.Println("Error disabling netclient@.service. Please investigate.")
+				log.Println(err)
+			}
 		}
+		_, err = RunCmd("systemctl daemon-reload")
+		if err != nil {
+			log.Println("Error stopping netclient-" + network + ".timer. Please investigate.")
+			log.Println(err)
+		}
+		_, err = RunCmd("systemctl disable netclient-" + network + ".timer")
+		if err != nil {
+			log.Println("Error disabling netclient-" + network + ".timer. Please investigate.")
+			log.Println(err)
+		}
+		if fullremove {
+			if FileExists("/etc/systemd/system/netclient@.service") {
+				err = os.Remove("/etc/systemd/system/netclient@.service")
+			}
+		}
+		if FileExists("/etc/systemd/system/netclient-" + network + ".timer") {
+			err = os.Remove("/etc/systemd/system/netclient-" + network + ".timer")
+		}
+		if err != nil {
+			log.Println("Error removing file. Please investigate.")
+			log.Println(err)
+		}
+		_, err = RunCmd("systemctl daemon-reload")
+		if err != nil {
+			log.Println("Error reloading system daemons. Please investigate.")
+			log.Println(err)
+		}
+		_, err = RunCmd("systemctl reset-failed")
+		if err != nil {
+			log.Println("Error reseting failed system services. Please investigate.")
+			log.Println(err)
+		}
+		return err
 	}
-	if FileExists("/etc/systemd/system/netclient-" + network + ".timer") {
-		err = os.Remove("/etc/systemd/system/netclient-" + network + ".timer")
-	}
-	if err != nil {
-		log.Println("Error removing file. Please investigate.")
-		log.Println(err)
-	}
-	_, err = RunCmd("systemctl daemon-reload")
-	if err != nil {
-		log.Println("Error reloading system daemons. Please investigate.")
-		log.Println(err)
-	}
-	_, err = RunCmd("systemctl reset-failed")
-	if err != nil {
-		log.Println("Error reseting failed system services. Please investigate.")
-		log.Println(err)
-	}
-	return err
+	return nil
 }
 
 func WipeLocal(network string) error {
@@ -267,25 +273,28 @@ func WipeLocal(network string) error {
 	ifacename := nodecfg.Interface
 
 	//home, err := homedir.Dir()
-	home := "/etc/netclient"
-	if FileExists(home + "/netconfig-" + network) {
-		_ = os.Remove(home + "/netconfig-" + network)
+	home := netclientutils.GetNetclientPathSpecific()
+	if FileExists(home + "netconfig-" + network) {
+		_ = os.Remove(home + "netconfig-" + network)
 	}
-	if FileExists(home + "/nettoken-" + network) {
-		_ = os.Remove(home + "/nettoken-" + network)
+	if FileExists(home + "nettoken-" + network) {
+		_ = os.Remove(home + "nettoken-" + network)
 	}
-	if FileExists(home + "/secret-" + network) {
-		_ = os.Remove(home + "/secret-" + network)
+	if FileExists(home + "secret-" + network) {
+		_ = os.Remove(home + "secret-" + network)
 	}
-	if FileExists(home + "/wgkey-" + network) {
-		_ = os.Remove(home + "/wgkey-" + network)
+	if FileExists(home + "wgkey-" + network) {
+		_ = os.Remove(home + "wgkey-" + network)
 	}
 
 	ipExec, err := exec.LookPath("ip")
 	if err != nil {
 		return err
 	}
-	if ifacename != "" {
+	if ifacename != "" && !netclientutils.IsWindows() {
+		// windows delete interface:
+		// netsh lan delete profile interface="InterfaceName"
+		// netsh wlan delete profile interface="InterfaceName"
 		out, err := RunCmd(ipExec + " link del " + ifacename)
 		if err != nil {
 			log.Println(out, err)
@@ -299,14 +308,15 @@ func WipeLocal(network string) error {
 		}
 	}
 	return err
-
 }
 
 func HasNetwork(network string) bool {
 
+	if netclientutils.IsWindows() {
+		return FileExists(netclientutils.GetNetclientPathSpecific() + "netconfig-" + network)
+	}
 	return FileExists("/etc/systemd/system/netclient-"+network+".timer") ||
-		FileExists("/etc/netclient/netconfig-"+network)
-
+		FileExists(netclientutils.GetNetclientPathSpecific()+"netconfig-"+network)
 }
 
 func copy(src, dst string) (int64, error) {

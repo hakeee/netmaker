@@ -12,18 +12,19 @@ import (
 	"github.com/gravitl/netmaker/models"
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/local"
+	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"github.com/gravitl/netmaker/netclient/server"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	//homedir "github.com/mitchellh/go-homedir"
 )
 
+func initWireguardWindows(interfaceName string, address string) error {
+	return netclientutils.CreateWGUserspace(interfaceName, address)
+}
+
 func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig, hasGateway bool, gateways []string) error {
 
-	ipExec, err := exec.LookPath("ip")
-	if err != nil {
-		return err
-	}
 	key, err := wgtypes.ParseKey(privkey)
 	if err != nil {
 		return err
@@ -64,18 +65,27 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 		network = node.Network
 	}
 
-	_, delErr := local.RunCmd("ip link delete dev " + ifacename)
-	addLinkOut, addLinkErr := local.RunCmd(ipExec + " link add dev " + ifacename + " type wireguard")
-	addOut, addErr := local.RunCmd(ipExec + " address add dev " + ifacename + " " + node.Address + "/24")
-	if delErr != nil {
-		// not displaying error
-		// log.Println(delOut, delErr)
-	}
-	if addLinkErr != nil {
-		log.Println(addLinkOut, addLinkErr)
-	}
-	if addErr != nil {
-		log.Println(addOut, addErr)
+	var ipExec string
+	if !netclientutils.IsWindows() {
+
+		ipExec, err := exec.LookPath("ip")
+		if err != nil {
+			return err
+		}
+
+		_, delErr := local.RunCmd("ip link delete dev " + ifacename)
+		addLinkOut, addLinkErr := local.RunCmd(ipExec + " link add dev " + ifacename + " type wireguard")
+		addOut, addErr := local.RunCmd(ipExec + " address add dev " + ifacename + " " + node.Address + "/24")
+		if delErr != nil {
+			// not displaying error
+			// log.Println(delOut, delErr)
+		}
+		if addLinkErr != nil {
+			log.Println(addLinkOut, addLinkErr)
+		}
+		if addErr != nil {
+			log.Println(addOut, addErr)
+		}
 	}
 	var nodeport int
 	nodeport = int(node.ListenPort)
@@ -98,6 +108,12 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 			Peers:        peers,
 		}
 	}
+
+	if netclientutils.IsWindows() { // need to create a userspace interface
+		if err = netclientutils.CreateWGUserspace(node.Interface, node.Address); err != nil {
+			log.Println("could not create interface for Windows client")
+		}
+	}
 	_, err = wgclient.Device(ifacename)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -109,7 +125,6 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 	}
 
 	err = wgclient.ConfigureDevice(ifacename, conf)
-
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("Device does not exist: ")
@@ -118,51 +133,54 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 			fmt.Printf("This is inconvenient: %v", err)
 		}
 	}
-	//=========DNS Setup==========\\
-	if nodecfg.DNSOn == "yes" {
-		_ = local.UpdateDNS(ifacename, network, nameserver)
-	}
-	//=========End DNS Setup=======\\
-	if ipLinkDownOut, err := local.RunCmd(ipExec + " link set down dev " + ifacename); err != nil {
-		log.Println(ipLinkDownOut, err)
-		return err
-	}
 
-	if nodecfg.PostDown != "" {
-		runcmds := strings.Split(nodecfg.PostDown, "; ")
-		err = local.RunCmds(runcmds)
-		if err != nil {
-			fmt.Println("Error encountered running PostDown: " + err.Error())
+	if !netclientutils.IsWindows() {
+		//=========DNS Setup==========\\
+		if nodecfg.DNSOn == "yes" {
+			_ = local.UpdateDNS(ifacename, network, nameserver)
 		}
-	}
-
-	if ipLinkUpOut, err := local.RunCmd(ipExec + " link set up dev " + ifacename); err != nil {
-		log.Println(ipLinkUpOut, err)
-		return err
-	}
-
-	if nodecfg.PostUp != "" {
-		runcmds := strings.Split(nodecfg.PostUp, "; ")
-		err = local.RunCmds(runcmds)
-		if err != nil {
-			fmt.Println("Error encountered running PostUp: " + err.Error())
+		//=========End DNS Setup=======\\
+		if ipLinkDownOut, err := local.RunCmd(ipExec + " link set down dev " + ifacename); err != nil {
+			log.Println(ipLinkDownOut, err)
+			return err
 		}
-	}
-	if hasGateway {
-		for _, gateway := range gateways {
-			out, err := local.RunCmd(ipExec + " -4 route add " + gateway + " dev " + ifacename)
-			fmt.Println(string(out))
+
+		if nodecfg.PostDown != "" {
+			runcmds := strings.Split(nodecfg.PostDown, "; ")
+			err = local.RunCmds(runcmds)
 			if err != nil {
-				fmt.Println("error encountered adding gateway: " + err.Error())
+				fmt.Println("Error encountered running PostDown: " + err.Error())
 			}
 		}
-	}
-	if node.Address6 != "" && node.IsDualStack == "yes" {
-		fmt.Println("adding address: " + node.Address6)
-		out, err := local.RunCmd(ipExec + " address add dev " + ifacename + " " + node.Address6 + "/64")
-		if err != nil {
-			fmt.Println(out)
-			fmt.Println("error encountered adding ipv6: " + err.Error())
+
+		if ipLinkUpOut, err := local.RunCmd(ipExec + " link set up dev " + ifacename); err != nil {
+			log.Println(ipLinkUpOut, err)
+			return err
+		}
+
+		if nodecfg.PostUp != "" {
+			runcmds := strings.Split(nodecfg.PostUp, "; ")
+			err = local.RunCmds(runcmds)
+			if err != nil {
+				fmt.Println("Error encountered running PostUp: " + err.Error())
+			}
+		}
+		if hasGateway {
+			for _, gateway := range gateways {
+				out, err := local.RunCmd(ipExec + " -4 route add " + gateway + " dev " + ifacename)
+				fmt.Println(string(out))
+				if err != nil {
+					fmt.Println("error encountered adding gateway: " + err.Error())
+				}
+			}
+		}
+		if node.Address6 != "" && node.IsDualStack == "yes" {
+			fmt.Println("adding address: " + node.Address6)
+			out, err := local.RunCmd(ipExec + " address add dev " + ifacename + " " + node.Address6 + "/64")
+			if err != nil {
+				fmt.Println(out)
+				fmt.Println("error encountered adding ipv6: " + err.Error())
+			}
 		}
 	}
 
@@ -314,11 +332,11 @@ func SetPeers(iface string, keepalive int32, peers []wgtypes.PeerConfig) error {
 
 func StorePrivKey(key string, network string) error {
 	d1 := []byte(key)
-	err := ioutil.WriteFile("/etc/netclient/wgkey-"+network, d1, 0644)
+	err := ioutil.WriteFile(netclientutils.GetNetclientPathSpecific()+"wgkey-"+network, d1, 0644)
 	return err
 }
 
 func RetrievePrivKey(network string) (string, error) {
-	dat, err := ioutil.ReadFile("/etc/netclient/wgkey-" + network)
+	dat, err := ioutil.ReadFile(netclientutils.GetNetclientPathSpecific() + "wgkey-" + network)
 	return string(dat), err
 }

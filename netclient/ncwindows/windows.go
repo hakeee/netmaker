@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 	"syscall"
 
@@ -33,21 +32,6 @@ import (
 func amAdminWindows() bool {
 	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
 	return err == nil
-}
-
-func GetHomeDirWindows() string {
-	if runtime.GOOS == "windows" {
-		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-		if home == "" {
-			home = os.Getenv("USERPROFILE")
-		}
-		return home
-	}
-	return os.Getenv("HOME")
-}
-
-func GetDataDirectoryWindows() string {
-	return GetHomeDirWindows() + netclientutils.WINDOWS_APP_DATA_PATH
 }
 
 func runMeElevated() {
@@ -77,15 +61,15 @@ func InitWindows() {
 		runMeElevated()
 	}
 
-	_, directoryErr := os.Stat(GetDataDirectoryWindows()) // Check if data directory exists or not
-	if os.IsNotExist(directoryErr) {                      // create a data directory
-		os.Mkdir(GetDataDirectoryWindows(), 0755)
+	_, directoryErr := os.Stat(netclientutils.GetNetclientPath()) // Check if data directory exists or not
+	if os.IsNotExist(directoryErr) {                              // create a data directory
+		os.Mkdir(netclientutils.GetNetclientPath(), 0755)
 	}
 	wdPath, wdErr := os.Getwd() // get the current working directory
 	if wdErr != nil {
 		log.Fatal("failed to get current directory..")
 	}
-	_, dataNetclientErr := os.Stat(GetDataDirectoryWindows() + "\\netclient.exe")
+	_, dataNetclientErr := os.Stat(netclientutils.GetNetclientPathSpecific() + "netclient.exe")
 	_, currentNetclientErr := os.Stat(wdPath + "\\netclient.exe")
 	if os.IsNotExist(dataNetclientErr) { // check and see if netclient.exe is in appdata
 		if currentNetclientErr == nil { // copy it if it exists locally
@@ -93,7 +77,7 @@ func InitWindows() {
 			if err != nil {
 				log.Println("failed to find netclient.exe")
 			}
-			if err = ioutil.WriteFile(GetDataDirectoryWindows()+"\\netclient.exe", input, 0644); err != nil {
+			if err = ioutil.WriteFile(netclientutils.GetNetclientPathSpecific()+"netclient.exe", input, 0644); err != nil {
 				log.Println("failed to copy netclient.exe to", netclientutils.WINDOWS_APP_DATA_PATH)
 			}
 		}
@@ -267,7 +251,6 @@ func WindowsJoin(cfg config.ClientConfig, privateKey string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("node created on remote server...updating configs")
 
 	nodeData := res.Data
 	var node models.Node
@@ -323,7 +306,8 @@ func WindowsJoin(cfg config.ClientConfig, privateKey string) error {
 	if err != nil {
 		return err
 	}
-	if cfg.Daemon != "off" { // TODO: use a windows job
+	if cfg.Daemon != "off" {
+		// TODO: use a windows job
 	}
 	if err != nil {
 		return err
