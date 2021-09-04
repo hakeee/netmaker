@@ -58,11 +58,34 @@ func Join(cfg config.ClientConfig, privateKey string) error {
 }
 
 func CheckIn(cfg config.ClientConfig) error {
-	if cfg.Network == "all" || cfg.Network == "" {
+	var err error
+	if cfg.Network == "" {
 		log.Println("Required, '-n'. No network provided. Exiting.")
 		os.Exit(1)
+	} else if cfg.Network == "all" {
+		log.Println("Running CheckIn for all networks.")
+		networks, err := functions.GetNetworks()
+		if err != nil {
+			log.Println("Error retrieving networks. Exiting.")
+			return err
+		}
+		for _, network := range networks {
+			currConf, err := config.ReadConfig(network)
+			if err != nil {
+				continue
+			}
+			err = functions.CheckConfig(*currConf)
+			if err != nil {
+				log.Printf("Error checking in for "+network+" network: ", err)
+			} else {
+				log.Println("checked in successfully for " + network)
+			}
+		}
+		err = nil
+
+	} else {
+		err = functions.CheckConfig(cfg)
 	}
-	err := functions.CheckConfig(cfg)
 	return err
 }
 
@@ -76,7 +99,7 @@ func Leave(cfg config.ClientConfig) error {
 
 func Push(cfg config.ClientConfig) error {
 	var err error
-	if cfg.Network == "all" {
+	if cfg.Network == "all" || netclientutils.IsWindows() {
 		log.Println("No network selected. Running Push for all networks.")
 		networks, err := functions.GetNetworks()
 		if err != nil {

@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
 	github.com/jinzhu/copier v0.3.2 // indirect
+	github.com/josephspurrier/goversioninfo v1.3.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.8
 	github.com/mdlayher/genetlink v1.0.0 // indirect
 	github.com/mikioh/ipaddr v0.0.0-20190404000644-d465c8ab6721 // indirect

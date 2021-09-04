@@ -1,3 +1,5 @@
+//go:generate goversioninfo -icon=testdata/resource/netmaker.ico -manifest=netclient.exe.manifest.xml -64=true -o=netclient.syso
+
 package main
 
 import (
@@ -5,7 +7,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/gravitl/netmaker/netclient/command"
 	"github.com/gravitl/netmaker/netclient/config"
@@ -339,9 +344,32 @@ func main() {
 			log.Fatal("WireGuard not installed. Please install WireGuard (wireguard-tools) and try again.")
 		}
 	}
-
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Fatal(err)
+	if netclientutils.IsWindows() {
+		if !local.IsWindowsWGInstalled() {
+			log.Fatal("Please install Windows WireGuard before using Gravitl Netclient. https://download.wireguard.com/windows-client/wireguard-installer.exe")
+		}
+	}
+	if len(os.Args) == 1 && netclientutils.IsWindows() {
+		newClientConfig := config.ClientConfig{
+			Network: "all",
+		}
+		c := make(chan os.Signal)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			log.Println("closing Gravitl Netclient")
+			os.Exit(0)
+		}()
+		for {
+			if err := command.CheckIn(newClientConfig); err != nil {
+				log.Fatal(err)
+			}
+			time.Sleep(time.Second * 30)
+		}
+	} else {
+		err := app.Run(os.Args)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

@@ -162,7 +162,7 @@ func Pull(network string, manual bool) (*models.Node, error) {
 	servercfg := cfg.Server
 	var header metadata.MD
 
-	if cfg.Node.IPForwarding == "yes" {
+	if cfg.Node.IPForwarding == "yes" && !netclientutils.IsWindows() {
 		if err = local.SetIPForwarding(); err != nil {
 			return nil, err
 		}
@@ -229,14 +229,15 @@ func Pull(network string, manual bool) (*models.Node, error) {
 	} else {
 		if err = wireguard.SetWGConfig(network, true); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				log.Println("readding interface")
 				return Pull(network, true)
 			} else {
 				return nil, err
 			}
 		}
 	}
-	setDNS(&resNode, servercfg, &cfg.Node)
+	if !netclientutils.IsWindows() {
+		setDNS(&resNode, servercfg, &cfg.Node)
+	}
 
 	return &resNode, err
 }

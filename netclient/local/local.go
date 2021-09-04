@@ -14,6 +14,8 @@ import (
 
 	"github.com/gravitl/netmaker/netclient/config"
 	"github.com/gravitl/netmaker/netclient/netclientutils"
+	"golang.zx2c4.com/wireguard/tun/wintun"
+	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
 func SetIPForwarding() error {
@@ -287,23 +289,48 @@ func WipeLocal(network string) error {
 		_ = os.Remove(home + "wgkey-" + network)
 	}
 
-	ipExec, err := exec.LookPath("ip")
-	if err != nil {
-		return err
-	}
-	if ifacename != "" && !netclientutils.IsWindows() {
-		// windows delete interface:
-		// netsh lan delete profile interface="InterfaceName"
-		// netsh wlan delete profile interface="InterfaceName"
-		out, err := RunCmd(ipExec + " link del " + ifacename)
-		if err != nil {
-			log.Println(out, err)
-		}
-		if nodecfg.PostDown != "" {
-			runcmds := strings.Split(nodecfg.PostDown, "; ")
-			err = RunCmds(runcmds)
+	if ifacename != "" {
+		if netclientutils.IsWindows() {
+			// delete wintun interface/tunnel
+			wg, err := wgctrl.New()
 			if err != nil {
-				log.Println("Error encountered running PostDown: " + err.Error())
+				return err
+			}
+			defer wg.Close()
+
+			devices, err := wg.Devices()
+			if err != nil {
+				log.Println("failed to fetch Wireguard devices")
+				return err
+			}
+
+			for _, d := range devices {
+				currentAdapter := wintun.Adapter{}
+				currentAdapter.SetName(d.Name)
+				name, _ := currentAdapter.Name()
+				log.Println("net yet deleted", d.Name, name)
+				// if d.Name == ifacename {
+				// 	// remove the device from machine
+				// 	currentAdapter.Delete(true)
+				// }
+				currentAdapter.Delete(true)
+				log.Println("deleted??", d.Name)
+			}
+		} else {
+			ipExec, err := exec.LookPath("ip")
+			if err != nil {
+				return err
+			}
+			out, err := RunCmd(ipExec + " link del " + ifacename)
+			if err != nil {
+				log.Println(out, err)
+			}
+			if nodecfg.PostDown != "" {
+				runcmds := strings.Split(nodecfg.PostDown, "; ")
+				err = RunCmds(runcmds)
+				if err != nil {
+					log.Println("Error encountered running PostDown: " + err.Error())
+				}
 			}
 		}
 	}

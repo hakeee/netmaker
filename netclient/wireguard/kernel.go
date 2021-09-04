@@ -20,7 +20,7 @@ import (
 )
 
 func initWireguardWindows(interfaceName string, address string) error {
-	return netclientutils.CreateWGUserspace(interfaceName, address)
+	return nil // netclientutils.CreateWGUserspace(interfaceName, address+"/32")
 }
 
 func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig, hasGateway bool, gateways []string) error {
@@ -108,33 +108,54 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 			Peers:        peers,
 		}
 	}
-
-	if netclientutils.IsWindows() { // need to create a userspace interface
-		if err = netclientutils.CreateWGUserspace(node.Interface, node.Address); err != nil {
-			log.Println("could not create interface for Windows client")
-		}
-	}
-	_, err = wgclient.Device(ifacename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("Device does not exist: ")
-			fmt.Println(err)
+	if netclientutils.IsWindows() {
+		var newConf string
+		if node.UDPHolePunch != "yes" {
+			newConf, _ = netclientutils.CreateUserSpaceConf(node.Address, key.String(), strconv.FormatInt(int64(node.ListenPort), 10), peers)
 		} else {
-			log.Fatalf("Unknown config error: %v", err)
+			newConf, _ = netclientutils.CreateUserSpaceConf(node.Address, key.String(), "", peers)
 		}
-	}
-
-	err = wgclient.ConfigureDevice(ifacename, conf)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("Device does not exist: ")
-			fmt.Println(err)
-		} else {
-			fmt.Printf("This is inconvenient: %v", err)
+		confPath := netclientutils.GetNetclientPathSpecific() + node.Interface + ".conf"
+		err = ioutil.WriteFile(confPath, []byte(newConf), 0644)
+		if err != nil {
+			return err
 		}
-	}
+		// spin up userspace / windows interface + apply the conf file
+		err := local.RemoveWindowsConf(node.Interface) // remove interface first
+		if err != nil {
+			log.Println("attempted to remove pre-existing windows interface before updating")
+		}
+		local.ApplyWindowsConf(confPath)
+	} else {
 
-	if !netclientutils.IsWindows() {
+		devices, err := wgclient.Devices()
+		if err != nil {
+			log.Println("no devices found:", err)
+		}
+		for _, d := range devices {
+			log.Println("found wg device:", d.Name)
+		}
+
+		_, err = wgclient.Device(ifacename)
+		if err != nil && !netclientutils.IsWindows() {
+			if os.IsNotExist(err) {
+				fmt.Println("Device does not exist: ")
+				fmt.Println(err)
+			} else {
+				log.Fatalf("Unknown config error: %v", err)
+			}
+		}
+
+		err = wgclient.ConfigureDevice(ifacename, conf)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("Device does not exist: ")
+				fmt.Println(err)
+			} else {
+				fmt.Printf("This is inconvenient: %v", err)
+			}
+		}
+
 		//=========DNS Setup==========\\
 		if nodecfg.DNSOn == "yes" {
 			_ = local.UpdateDNS(ifacename, network, nameserver)
@@ -183,7 +204,6 @@ func InitWireguard(node *models.Node, privkey string, peers []wgtypes.PeerConfig
 			}
 		}
 	}
-
 	return err
 }
 

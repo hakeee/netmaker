@@ -2,6 +2,7 @@ package netclientutils
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 const NO_DB_RECORD = "no result found"
@@ -19,7 +21,7 @@ const NO_DB_RECORDS = "could not find any records"
 const WINDOWS_APP_DATA_PATH = "\\AppData\\Local\\Netclient"
 const LINUX_APP_DATA_PATH = "/etc/netclient"
 const WINDOWS_SVC_NAME = "Netclient"
-const DEFAULT_MTU = 1200
+const DEFAULT_MTU = 1280
 
 func IsWindows() bool {
 	return runtime.GOOS == "windows"
@@ -88,6 +90,56 @@ func GetMacAddr() ([]string, error) {
 		}
 	}
 	return as, nil
+}
+
+func parsePeers(peers []wgtypes.PeerConfig) (string, error) {
+	peersString := ""
+	// PublicKey
+	// AllowedIps
+	// Enpoint publicip/localip:port
+	// PersistentKeepAlive
+	for _, peer := range peers {
+		newAllowedIps := []string{}
+		for _, allowedIP := range peer.AllowedIPs {
+			newAllowedIps = append(newAllowedIps, allowedIP.String())
+		}
+		peersString += fmt.Sprintf(`[Peer]
+PublicKey = %s
+AllowedIps = %s
+Endpoint = %s
+PersistentKeepAlive = 20
+
+`,
+			peer.PublicKey.String(),
+			strings.Join(newAllowedIps, ","),
+			peer.Endpoint.String(),
+		)
+	}
+	return peersString, nil
+}
+
+func CreateUserSpaceConf(address string, privatekey string, listenPort string, peers []wgtypes.PeerConfig) (string, error) {
+	peersString, err := parsePeers(peers)
+	listenPortString := ""
+	if listenPort != "" {
+		listenPortString += "ListenPort = " + listenPort
+	}
+	if err != nil {
+		return "", err
+	}
+	config := fmt.Sprintf(`[Interface]
+Address = %s
+PrivateKey = %s
+%s
+
+%s
+
+`,
+		address+"/32",
+		privatekey,
+		listenPortString,
+		peersString)
+	return config, nil
 }
 
 func GetLocalIP(localrange string) (string, error) {

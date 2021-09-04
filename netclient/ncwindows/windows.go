@@ -10,8 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
-	"syscall"
 
 	nodepb "github.com/gravitl/netmaker/grpc"
 	"github.com/gravitl/netmaker/models"
@@ -21,45 +19,14 @@ import (
 	"github.com/gravitl/netmaker/netclient/netclientutils"
 	"github.com/gravitl/netmaker/netclient/server"
 	"github.com/gravitl/netmaker/netclient/wireguard"
-	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
-// == BEGIN WINDOWS UTIL FUNCTIONS ==
-func amAdminWindows() bool {
-	_, err := os.Open("\\\\.\\PHYSICALDRIVE0")
-	return err == nil
-}
-
-func runMeElevated() {
-	verb := "runas"
-	exe, _ := os.Executable()
-	cwd, _ := os.Getwd()
-	args := strings.Join(os.Args[1:], " ")
-
-	verbPtr, _ := syscall.UTF16PtrFromString(verb)
-	exePtr, _ := syscall.UTF16PtrFromString(exe)
-	cwdPtr, _ := syscall.UTF16PtrFromString(cwd)
-	argPtr, _ := syscall.UTF16PtrFromString(args)
-
-	var showCmd int32 = 1 //SW_NORMAL
-
-	err := windows.ShellExecute(0, verbPtr, exePtr, argPtr, cwdPtr, showCmd)
-	if err != nil {
-		log.Fatal("please run netclient as an admin user")
-	}
-}
-
-// == END WINDOWS UTIL FUNCTIONS ==
-
 // Initialize windows directory & files and such
 func InitWindows() {
-	if !amAdminWindows() { // first check if user is a Windows admin
-		runMeElevated()
-	}
 
 	_, directoryErr := os.Stat(netclientutils.GetNetclientPath()) // Check if data directory exists or not
 	if os.IsNotExist(directoryErr) {                              // create a data directory
@@ -76,14 +43,16 @@ func InitWindows() {
 			input, err := ioutil.ReadFile(wdPath + "\\netclient.exe")
 			if err != nil {
 				log.Println("failed to find netclient.exe")
+				return
 			}
 			if err = ioutil.WriteFile(netclientutils.GetNetclientPathSpecific()+"netclient.exe", input, 0644); err != nil {
-				log.Println("failed to copy netclient.exe to", netclientutils.WINDOWS_APP_DATA_PATH)
+				log.Println("failed to copy netclient.exe to", netclientutils.GetNetclientPath())
+				return
 			}
 		}
 	}
 
-	log.Println("successfully initialized Windows Netclient, happy meshing!")
+	log.Println("Gravitl Netclient on Windows initialized")
 }
 
 /**
@@ -314,20 +283,4 @@ func WindowsJoin(cfg config.ClientConfig, privateKey string) error {
 	}
 
 	return err
-}
-
-/**
- * Leave command for windows client
- */
-func WindowsLeave() error {
-
-	return nil
-}
-
-/**
- *	Check config/in function for windows client
- */
-func WindowsCheckConfig() error {
-
-	return nil
 }

@@ -46,44 +46,19 @@ func ListPorts() error {
 }
 
 func getPrivateAddr() (string, error) {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return "", err
-	}
+
 	var local string
-	found := false
-	for _, i := range ifaces {
-		if i.Flags&net.FlagUp == 0 {
-			continue // interface down
-		}
-		if i.Flags&net.FlagLoopback != 0 {
-			continue // loopback interface
-		}
-		addrs, err := i.Addrs()
-		if err != nil {
-			return "", err
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				if !found {
-					ip = v.IP
-					local = ip.String()
-					found = true
-				}
-			case *net.IPAddr:
-				if !found {
-					ip = v.IP
-					local = ip.String()
-					found = true
-				}
-			}
-		}
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
 	}
-	if !found {
-		err := errors.New("Local Address Not Found.")
-		return "", err
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	localIP := localAddr.IP
+	local = localIP.String()
+	if local == "" {
+		err = errors.New("could not find local ip")
 	}
 	return local, err
 }
@@ -97,7 +72,6 @@ func needInterfaceUpdate(ctx context.Context, mac string, network string, iface 
 	readres, err := wcclient.ReadNode(ctx, req, grpc.Header(&header))
 	if err != nil {
 		return false, "", err
-		log.Fatalf("Error: %v", err)
 	}
 	var resNode models.Node
 	if err := json.Unmarshal([]byte(readres.Data), &resNode); err != nil {
@@ -161,6 +135,10 @@ func LeaveNetwork(network string) error {
 		if err != nil {
 			log.Printf("Failed to authenticate: %v", err)
 		} else {
+			if netclientutils.IsWindows() {
+				local.RemoveWindowsConf(node.Interface)
+				log.Println("removed Windows tunnel " + node.Interface)
+			}
 			node.SetID()
 			var header metadata.MD
 			_, err = wcclient.DeleteNode(
@@ -200,19 +178,24 @@ func RemoveLocalInstance(cfg *config.ClientConfig, networkName string) error {
 }
 
 func DeleteInterface(ifacename string, postdown string) error {
-	ipExec, err := exec.LookPath("ip")
-	if err != nil {
-		log.Println(err)
-	}
-	out, err := local.RunCmd(ipExec + " link del " + ifacename)
-	if err != nil {
-		log.Println(out, err)
-	}
-	if postdown != "" {
-		runcmds := strings.Split(postdown, "; ")
-		err = local.RunCmds(runcmds)
+	var err error
+	if netclientutils.IsWindows() {
+		err = local.RemoveWindowsConf(ifacename)
+	} else {
+		ipExec, err := exec.LookPath("ip")
 		if err != nil {
-			log.Println("Error encountered running PostDown: " + err.Error())
+			log.Println(err)
+		}
+		out, err := local.RunCmd(ipExec + " link del " + ifacename)
+		if err != nil {
+			log.Println(out, err)
+		}
+		if postdown != "" {
+			runcmds := strings.Split(postdown, "; ")
+			err = local.RunCmds(runcmds)
+			if err != nil {
+				log.Println("Error encountered running PostDown: " + err.Error())
+			}
 		}
 	}
 	return err
