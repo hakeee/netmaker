@@ -302,10 +302,16 @@ func WipeLocal(network string) error {
 
 }
 
-func HasNetwork(network string) bool {
+func HasInstalledSystemD(network string) bool {
+	return FileExists("/etc/systemd/system/netclient-" + network + ".timer")
+}
 
-	return FileExists("/etc/systemd/system/netclient-"+network+".timer") ||
-		FileExists("/etc/netclient/netconfig-"+network)
+func HasJoinedNetwork(network string) bool {
+	return FileExists("/etc/netclient/netconfig-" + network)
+}
+
+func HasNetwork(network string) bool {
+	return HasInstalledSystemD(network) || HasJoinedNetwork(network)
 
 }
 

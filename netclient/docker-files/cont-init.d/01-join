@@ -1,0 +1,2 @@
+#!/usr/bin/with-contenv sh
+netclient join --dns=no --daemon=off -t "$NET_TOKEN"

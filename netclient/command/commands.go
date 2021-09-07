@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"log"
 	"os"
 	"strings"
@@ -19,6 +20,20 @@ var (
 var (
 	wcclient nodepb.NodeServiceClient
 )
+
+func Install(cfg config.ClientConfig) error {
+	hasJoined := local.HasJoinedNetwork(cfg.Network)
+	hasSystemD := local.HasInstalledSystemD(cfg.Network)
+	if hasJoined && !hasSystemD {
+		return functions.InstallDaemon(cfg)
+	}
+
+	if hasSystemD {
+		return errors.New("NETWORK_ALREADY_INSTALLED: The network (" + cfg.Network + ") is already installed!")
+	}
+
+	return errors.New("NETWORK_NOT_FOUND: The network (" + cfg.Network + ") is not found. Please join the network with the join command before installing.")
+}
 
 func Join(cfg config.ClientConfig, privateKey string) error {
 

@@ -204,6 +204,30 @@ func main() {
 
 	app.Commands = []*cli.Command{
 		{
+			Name:  "install",
+			Usage: "Install SystemD service for network.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    "network",
+					Aliases: []string{"n"},
+					EnvVars: []string{"NETCLIENT_NETWORK"},
+					Value:   "all",
+					Usage:   "Network to perform specified action against.",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				cfg, _, err := config.GetCLIConfig(c)
+				if err != nil {
+					return err
+				}
+				if cfg.Network == "all" {
+					err = errors.New("No network provided.")
+					return err
+				}
+				err = command.Install(cfg)
+				return err
+			},
+		}, {
 			Name:  "join",
 			Usage: "Join a Netmaker network.",
 			Flags: cliFlags,
