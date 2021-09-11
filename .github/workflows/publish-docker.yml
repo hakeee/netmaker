@@ -3,7 +3,7 @@ name: Publish Docker
 on:
   push:
     branches: 
-      - 'release'
+      - 'release/*'
     tags:
       - 'v*'
   pull_request:
@@ -12,10 +12,54 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: hakeee/netmaker
+  IMAGE_NAME_CLIENT: hakeee/netclient
 
 jobs:
-  build-and-push-image:
+  build-and-push-netclient:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CLIENT }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build and push latest client
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile-netclient
+          platforms: linux/amd64, linux/arm64, linux/arm/v6, linux/arm/v7
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  build-and-push-netmaker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,19 +92,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      # - name: Build and push latest server
-      #   uses: docker/build-push-action@v2
-      #   with:
-      #     context: .
-      #     platforms: linux/amd64, linux/arm64, linux/arm/v6, linux/arm/v7
-      #     push: true
-      #     tags: hakeee/netmaker:${{ env.TAG }}
-
-      - name: Build and push latest client
+      - name: Build and push latest server
         uses: docker/build-push-action@v2
         with:
           context: .
-          file: ./Dockerfile-netclient
           platforms: linux/amd64, linux/arm64, linux/arm/v6, linux/arm/v7
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
